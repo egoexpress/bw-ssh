@@ -19,7 +19,11 @@ def bw_get(key: Path):
 
 
 def bw_exists(key: Path):
-    history_cmd = rbw("history", *RBW_ARGS, key.name, _ok_code=[0, 1])
+    # sh >= 2.0 returns a plain str instead of a RunningCommand unless
+    # _return_cmd is set, so exit_code/stderr are only available this way.
+    history_cmd = rbw(
+        "history", *RBW_ARGS, key.name, _ok_code=[0, 1], _return_cmd=True
+    )
     return history_cmd.exit_code == 0 or b"no entry found" not in history_cmd.stderr
 
 
