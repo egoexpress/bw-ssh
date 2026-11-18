@@ -1,0 +1,94 @@
+From e4deb0fcf34e642667a387da901b035e89ad74e7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bj=C3=B6rn=20Stierand?= <bjoern-github@innovention.de>
+Date: Wed, 18 Nov 2026 09:50:48 +0100
+Subject: [PATCH 3/3] fix(askpass): answer non-passphrase prompts on the
+ terminal
+
+SSH_ASKPASS_REQUIRE=prefer sends every ssh prompt to the helper, not
+just key passphrases. The host key confirmation for an unknown host
+("Are you sure you want to continue connecting ...") therefore reached
+askpass, where the passphrase regex found no key path and raised
+AttributeError. ssh treats a failing helper as "no" and aborts with
+"Host key verification failed".
+
+Match only real passphrase prompts and ask for everything else (host
+key confirmation, passwords, keyboard-interactive) on /dev/tty, hiding
+input for passwords. Without a terminal, print the prompt and exit 1
+instead of crashing.
+---
+ bw-askpass | 50 +++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 47 insertions(+), 3 deletions(-)
+
+diff --git a/bw-askpass b/bw-askpass
+index f469ccd..86559f6 100755
+--- a/bw-askpass
++++ b/bw-askpass
+@@ -2,9 +2,12 @@
+ 
+ from sh import rbw, ssh_keygen, ErrorReturnCode
+ from pathlib import Path
+-import os, re, sys
++import getpass, io, os, re, sys
+ 
+-KEY_PATTERN = re.compile(r" for(?: key)? '?(.+?)'?: ")
++KEY_PATTERN = re.compile(
++    r"^(?:Enter passphrase for|Bad passphrase, try again for)(?: key)? "
++    r"'?(?P<path>.+?)'?: ?$"
++)
+ RBW_ARGS = ["--folder", "ssh"]
+ 
+ 
+@@ -39,8 +42,49 @@ def check_key(private_key: Path, passphrase: str):
+         return False
+ 
+ 
++def terminal_prompt(prompt: str):
++    """Ask the user directly for prompts that are not key passphrases.
++
++    SSH_ASKPASS_REQUIRE=prefer sends every prompt through this program,
++    including host key confirmation and password prompts, so those must not
++    be treated as vault lookups.
++    """
++    try:
++        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
++    except OSError:
++        print(prompt, end="", file=sys.stderr, flush=True)
++        print(
++            "bw-askpass: prompt needs a terminal, none is available",
++            file=sys.stderr,
++        )
++        sys.exit(1)
++
++    # A tty is not seekable, so plain open(..., "r+") would fail with
++    # io.UnsupportedOperation; io.FileIO is happy with it.
++    with io.TextIOWrapper(io.FileIO(fd, "r+")) as tty:
++        if "yes/no" in prompt:
++            tty.write(prompt)
++            tty.flush()
++            answer = tty.readline().strip()
++            if not answer:
++                sys.exit(1)
++            return answer
++
++    # Hide the input for passwords and keyboard-interactive prompts.
++    try:
++        return getpass.getpass(prompt)
++    except EOFError:
++        sys.exit(1)
++
++
+ def askpass():
+-    key = Path(KEY_PATTERN.search(sys.argv[1]).group(1))
++    prompt = sys.argv[1] if len(sys.argv) > 1 else ""
++    match = KEY_PATTERN.search(prompt)
++    if not match:
++        print(terminal_prompt(prompt), flush=True)
++        return
++
++    key = Path(match.group("path"))
+     print(f"Reading passphrase from Bitwarden vault for {key}", file=sys.stderr)
+ 
+     passphrase = bw_get(key)
+-- 
+2.56.1
+

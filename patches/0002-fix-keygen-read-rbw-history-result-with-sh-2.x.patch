@@ -1,0 +1,32 @@
+From 0e1821fe5d91a4450eb82dd5cefe23974b7491bc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bj=C3=B6rn=20Stierand?= <bjoern-github@innovention.de>
+Date: Wed, 18 Nov 2026 09:50:41 +0100
+Subject: [PATCH 2/3] fix(keygen): read rbw history result with sh 2.x
+
+sh 2.0 returns a plain str unless _return_cmd is set, so accessing
+exit_code and stderr raised AttributeError and bw-keygen could not
+detect an existing vault entry.
+---
+ bw-askpass | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/bw-askpass b/bw-askpass
+index 13cb8db..f469ccd 100755
+--- a/bw-askpass
++++ b/bw-askpass
+@@ -19,7 +19,11 @@ def bw_get(key: Path):
+ 
+ 
+ def bw_exists(key: Path):
+-    history_cmd = rbw("history", *RBW_ARGS, key.name, _ok_code=[0, 1])
++    # sh >= 2.0 returns a plain str instead of a RunningCommand unless
++    # _return_cmd is set, so exit_code/stderr are only available this way.
++    history_cmd = rbw(
++        "history", *RBW_ARGS, key.name, _ok_code=[0, 1], _return_cmd=True
++    )
+     return history_cmd.exit_code == 0 or b"no entry found" not in history_cmd.stderr
+ 
+ 
+-- 
+2.56.1
+
