@@ -10,6 +10,9 @@ RBW_ARGS = ["--folder", "ssh"]
 
 def bw_get(key: Path):
     passphrase_cmd = rbw("get", *RBW_ARGS, key.name, _ok_code=[0, 1])
+    if not passphrase_cmd:
+        print(f"No passphrase entry found in Bitwarden for {key}", file=sys.stderr)
+        sys.exit(1)
     # Remove new line character
     passphrase = str(passphrase_cmd)[:-1]
     return passphrase
