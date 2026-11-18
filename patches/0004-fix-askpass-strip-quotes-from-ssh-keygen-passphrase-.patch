@@ -1,0 +1,60 @@
+From c30374663e9ddf833e95e2f966dbc0f3e0fa0197 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bj=C3=B6rn=20Stierand?= <bjoern-github@innovention.de>
+Date: Wed, 18 Nov 2026 14:21:42 +0100
+Subject: [PATCH 4/4] fix(askpass): strip quotes from ssh-keygen passphrase
+ prompts
+
+ssh and ssh-add write "Enter passphrase for key '<path>':", while
+ssh-keygen (used by git for SSH commit signing) writes
+'Enter passphrase for "<path>":'. The path was captured with the quotes
+attached, so the vault lookup asked rbw for 'id_ed25519"' and found no
+entry, and git failed to sign commits with "incorrect passphrase".
+
+Strip matching quotes of either style before building the path.
+---
+ bw-askpass | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/bw-askpass b/bw-askpass
+index 86559f6..5a8056c 100755
+--- a/bw-askpass
++++ b/bw-askpass
+@@ -6,7 +6,7 @@ import getpass, io, os, re, sys
+ 
+ KEY_PATTERN = re.compile(
+     r"^(?:Enter passphrase for|Bad passphrase, try again for)(?: key)? "
+-    r"'?(?P<path>.+?)'?: ?$"
++    r"(?P<path>.+?): ?$"
+ )
+ RBW_ARGS = ["--folder", "ssh"]
+ 
+@@ -77,6 +77,17 @@ def terminal_prompt(prompt: str):
+         sys.exit(1)
+ 
+ 
++def unquote(path: str) -> str:
++    """Strip the quotes ssh and ssh-keygen put around the key path.
++
++    ssh and ssh-add use single quotes, ssh-keygen (also used by git for SSH
++    commit signing) uses double quotes.
++    """
++    if len(path) > 1 and path[0] == path[-1] and path[0] in "'\"":
++        return path[1:-1]
++    return path
++
++
+ def askpass():
+     prompt = sys.argv[1] if len(sys.argv) > 1 else ""
+     match = KEY_PATTERN.search(prompt)
+@@ -84,7 +95,7 @@ def askpass():
+         print(terminal_prompt(prompt), flush=True)
+         return
+ 
+-    key = Path(match.group("path"))
++    key = Path(unquote(match.group("path")))
+     print(f"Reading passphrase from Bitwarden vault for {key}", file=sys.stderr)
+ 
+     passphrase = bw_get(key)
+-- 
+2.56.1
+

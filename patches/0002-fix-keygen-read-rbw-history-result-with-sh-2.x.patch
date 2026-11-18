@@ -1,7 +1,7 @@
 From 0e1821fe5d91a4450eb82dd5cefe23974b7491bc Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Bj=C3=B6rn=20Stierand?= <bjoern-github@innovention.de>
 Date: Wed, 18 Nov 2026 09:50:41 +0100
-Subject: [PATCH 2/3] fix(keygen): read rbw history result with sh 2.x
+Subject: [PATCH 2/4] fix(keygen): read rbw history result with sh 2.x
 
 sh 2.0 returns a plain str unless _return_cmd is set, so accessing
 exit_code and stderr raised AttributeError and bw-keygen could not

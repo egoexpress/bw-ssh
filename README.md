@@ -58,6 +58,7 @@ because the passphrase regex found no key path in
 | Commit | Change |
 | --- | --- |
 | `fix(askpass): answer non-passphrase prompts on the terminal` | Only real passphrase prompts are looked up in the vault. Host key confirmation, passwords and keyboard-interactive prompts are asked on `/dev/tty`, with echo disabled for secrets. Without a terminal the prompt is printed and the helper exits 1 instead of raising. |
+| `fix(askpass): strip quotes from ssh-keygen passphrase prompts` | `ssh-keygen`, which git uses for SSH commit signing, quotes the key path with `"` instead of `'`. The quotes ended up in the vault lookup, so the entry was not found and signing failed. |
 | `fix(askpass): exit when the vault has no passphrase entry` | An empty `rbw get` result is reported as a missing vault entry instead of being returned as an empty passphrase. |
 | `fix(keygen): read rbw history result with sh 2.x` | `sh` 2.0 returns a plain `str` unless `_return_cmd` is set. Reading `exit_code` and `stderr` raised `AttributeError`, so `bw-keygen` could not detect an existing vault entry. |
 
@@ -85,10 +86,12 @@ set -gx SSH_ASKPASS_REQUIRE prefer
 The helper decides by the prompt text what to do:
 
 - `Enter passphrase for key '<path>':` and
-  `Bad passphrase, try again for '<path>':` are looked up in the Bitwarden
-  vault, using the key's file name inside the `ssh` folder (`rbw get --folder
-  ssh <name>`). The passphrase is verified with `ssh-keygen -y` before it is
-  returned, so a wrong entry cannot make `ssh-add` loop.
+  `Bad passphrase, try again for '<path>':` from ssh and ssh-add, and the
+  double-quoted `Enter passphrase for "<path>":` from ssh-keygen (used by git
+  for SSH commit signing), are looked up in the Bitwarden vault, using the
+  key's file name inside the `ssh` folder (`rbw get --folder ssh <name>`). The
+  passphrase is verified with `ssh-keygen -y` before it is returned, so a
+  wrong entry cannot make `ssh-add` loop.
 - Host key confirmation is shown verbatim on the terminal, so the fingerprint
   can be compared before answering `yes`. Trusting a host on first sight is
   the same decision ssh asks for without an askpass helper.

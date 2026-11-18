@@ -1,7 +1,7 @@
 From e4deb0fcf34e642667a387da901b035e89ad74e7 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Bj=C3=B6rn=20Stierand?= <bjoern-github@innovention.de>
 Date: Wed, 18 Nov 2026 09:50:48 +0100
-Subject: [PATCH 3/3] fix(askpass): answer non-passphrase prompts on the
+Subject: [PATCH 3/4] fix(askpass): answer non-passphrase prompts on the
  terminal
 
 SSH_ASKPASS_REQUIRE=prefer sends every ssh prompt to the helper, not
