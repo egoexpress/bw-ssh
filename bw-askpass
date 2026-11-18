@@ -2,9 +2,12 @@
 
 from sh import rbw, ssh_keygen, ErrorReturnCode
 from pathlib import Path
-import os, re, sys
+import getpass, io, os, re, sys
 
-KEY_PATTERN = re.compile(r" for(?: key)? '?(.+?)'?: ")
+KEY_PATTERN = re.compile(
+    r"^(?:Enter passphrase for|Bad passphrase, try again for)(?: key)? "
+    r"'?(?P<path>.+?)'?: ?$"
+)
 RBW_ARGS = ["--folder", "ssh"]
 
 
@@ -39,8 +42,49 @@ def check_key(private_key: Path, passphrase: str):
         return False
 
 
+def terminal_prompt(prompt: str):
+    """Ask the user directly for prompts that are not key passphrases.
+
+    SSH_ASKPASS_REQUIRE=prefer sends every prompt through this program,
+    including host key confirmation and password prompts, so those must not
+    be treated as vault lookups.
+    """
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        print(prompt, end="", file=sys.stderr, flush=True)
+        print(
+            "bw-askpass: prompt needs a terminal, none is available",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # A tty is not seekable, so plain open(..., "r+") would fail with
+    # io.UnsupportedOperation; io.FileIO is happy with it.
+    with io.TextIOWrapper(io.FileIO(fd, "r+")) as tty:
+        if "yes/no" in prompt:
+            tty.write(prompt)
+            tty.flush()
+            answer = tty.readline().strip()
+            if not answer:
+                sys.exit(1)
+            return answer
+
+    # Hide the input for passwords and keyboard-interactive prompts.
+    try:
+        return getpass.getpass(prompt)
+    except EOFError:
+        sys.exit(1)
+
+
 def askpass():
-    key = Path(KEY_PATTERN.search(sys.argv[1]).group(1))
+    prompt = sys.argv[1] if len(sys.argv) > 1 else ""
+    match = KEY_PATTERN.search(prompt)
+    if not match:
+        print(terminal_prompt(prompt), flush=True)
+        return
+
+    key = Path(match.group("path"))
     print(f"Reading passphrase from Bitwarden vault for {key}", file=sys.stderr)
 
     passphrase = bw_get(key)
